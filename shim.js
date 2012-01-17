@@ -319,6 +319,7 @@ initialize_slideshow = function() {
 // MAIN FUNCTION
 // ------------------------------------------------------------------------------
 
+
 server = http.createServer(function (req, res) 
 {
 //  for (property in req.headers) console.log(property + ":" +req.headers[property]+"")
@@ -422,70 +423,54 @@ function handle_cookies(host,req)
 	//console.log("+++ combined_cookie_string for "+host+": " + combined_cookie_string)
 }
 
-shim_proxy = function(request,response)
-{
-//	shim = "<meta name='viewport' content='user-scalable=no, width=device-width,initial-scale=1, minimum-scale=1, maximum-scale=1'/>"
-//	shim+="<script>globe.OAS=null</script>"
-	shim = generate_shim(request)     
-	host = request.headers['host']
-	var proxy = http.createClient(80, host)
-	request_headers = request.headers
-	request_headers['Accept-Encoding']=''
-	request_headers['accept-encoding']=''
-	
-	handle_cookies(host,request)
-	_path = "http://"+request.headers['host']+request.url;
-	var proxy_request = proxy.request(request.method, request.url, request_headers);
-	proxy_request.addListener('response', function (proxy_response) 
-	{ 
-		console.log('initial response to: '+_path)
-		shim_added=false;	
-		var declared_content_length = 0
-		var actual_content_length = 0
-		proxy_response.addListener('data', function(chunk) 
-		{
-/*			if (!shim_added)
-			{
-				console.log("actually adding shim with size "+shim.length)
-				chunk=shim+chunk;
-				shim_added=true;
-			}
-*/
-			actual_content_length+=chunk.length
-//			console.log("SHIM PAGE chunk: "+chunk.length+":"+actual_content_length+"/"+declared_content_length)
-			response.write(chunk, 'binary');
+function shim_proxy(request,response) {
+  var shim = generate_shim(request);
+  var host = request.headers['host'];
+  var	request_headers = request.headers;
+	request_headers['Accept-Encoding']='';
+	request_headers['accept-encoding']='';
+
+  var _path = request.url;
+  //http only for now
+  var options = {
+    host: host,
+    port: 80,
+    path: request.url,
+    headers: request_headers,
+    method: request.method
+  };
+  //send request to distant page
+	var proxy_request = http.request(options,function (proxy_response) {
+    console.log('initial response to: '+_path);
+		var declared_content_length = 0;
+		var actual_content_length = 0;
+    
+    response.writeHead(proxy_response.statusCode, proxy_response.headers);
+
+    proxy_response.addListener('data', function(chunk) {
+			actual_content_length+=chunk.length;
+	    //response.write(chunk, 'binary');
+      data_str += chunk;
+      response.write(chunk,'binary');
 		}); //addListener
 
-		proxy_response.addListener('end', function() 
-		{
-			console.log("SHIM PAGE response end")
-			console.log("actually adding shim with size "+shim.length)
+		proxy_response.addListener('end', function() {
+			console.log("SHIM PAGE response end");
 			response.write(shim, 'binary');
-			response.end();
+      response.end();
 		});
-//		console.log("SHIM PAGE adding headers")
-		headers = proxy_response.headers
-		declared_content_length = headers['content-length']=(parseInt(headers['content-length'])+shim.length); 
-		if (is_redirect(proxy_response))
-		{
-			console.log("+++ detected redirect, appending set string to location header value")
-			headers["location"]=append_set_string(headers["location"])
-		}
-		response.writeHead(proxy_response.statusCode, headers);
-}); //addData
+  }); //addData
 
-
-
-	request.addListener('data', function(chunk) 
-	{
+  request.addListener('data', function(chunk) {
 		proxy_request.write(chunk, 'binary');
 	});
 
-	request.addListener('end', function() 
-	{
+	request.addListener('end', function() {
 		proxy_request.end();
 	});
+
 }
+
 
 console.log("server:"+server)
 
